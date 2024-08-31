@@ -1,0 +1,213 @@
+/**
+ * Invoice Ninja (https://invoiceninja.com).
+ *
+ * @link https://github.com/invoiceninja/invoiceninja source repository
+ *
+ * @copyright Copyright (c) 2022. Invoice Ninja LLC (https://invoiceninja.com)
+ *
+ * @license https://www.elastic.co/licensing/elastic-license
+ */
+
+import { Card, Element } from '$app/components/cards';
+import { InputField } from '$app/components/forms';
+import { CurrencySelector } from '$app/components/CurrencySelector';
+import Toggle from '$app/components/forms/Toggle';
+import { PaymentTypeSelector } from '$app/components/payment-types/PaymentTypeSelector';
+import dayjs from 'dayjs';
+import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { RecurringExpenseCardProps } from './Details';
+import { useCurrentCompany } from '$app/common/hooks/useCurrentCompany';
+
+export function AdditionalInfo(props: RecurringExpenseCardProps) {
+  const [t] = useTranslation();
+  const company = useCurrentCompany();
+
+  const { recurringExpense, handleChange, errors } = props;
+
+  const [convertCurrency, setConvertCurrency] = useState<boolean>();
+
+  const isMarkPaid = () => {
+    return (
+      Boolean(recurringExpense?.payment_type_id) ||
+      Boolean(recurringExpense?.payment_date) ||
+      Boolean(recurringExpense?.transaction_reference)
+    );
+  };
+
+  const onMarkPaid = (checked: boolean) => {
+    if (!checked) {
+      handleChange('payment_date', '');
+      handleChange('payment_type_id', '');
+      handleChange('transaction_reference', '');
+
+      return;
+    }
+
+    handleChange('payment_date', dayjs().format('YYYY-MM-DD'));
+  };
+
+  const onConvertCurrency = (checked: boolean) => {
+    if (!checked) {
+      handleChange('invoice_currency_id', '');
+      handleChange('exchange_rate', 0);
+      handleChange('foreign_amount', 0);
+
+      return;
+    }
+
+    handleChange('exchange_rate', 1);
+    handleChange('foreign_amount', recurringExpense!.amount);
+  };
+
+  useEffect(() => {
+    if (convertCurrency) {
+      handleChange(
+        'foreign_amount',
+        recurringExpense!.amount * recurringExpense!.exchange_rate
+      );
+    }
+  }, [recurringExpense?.amount]);
+
+  const onExchangeRateChange = (rate: string) => {
+    handleChange('exchange_rate', parseFloat(rate) || 1);
+    handleChange(
+      'foreign_amount',
+      recurringExpense!.amount * parseFloat(rate) || 1
+    );
+  };
+
+  const onConvertedAmountChange = (amount: string) => {
+    handleChange(
+      'foreign_amount',
+      parseFloat(amount) || recurringExpense!.amount
+    );
+    handleChange(
+      'exchange_rate',
+      parseFloat(amount) / recurringExpense!.amount
+    );
+  };
+
+  useEffect(() => {
+    if (recurringExpense && typeof convertCurrency === 'undefined') {
+      setConvertCurrency(
+        Boolean(company?.convert_expense_currency) ||
+          Boolean(recurringExpense?.foreign_amount)
+      );
+    }
+  }, [recurringExpense]);
+
+  return (
+    <Card title={t('additional_info')} isLoading={!recurringExpense}>
+      {recurringExpense && (
+        <Element
+          leftSide={t('should_be_invoiced')}
+          leftSideHelp={t('mark_invoiceable_help')}
+        >
+          <Toggle
+            checked={recurringExpense.should_be_invoiced}
+            onChange={(value) => handleChange('should_be_invoiced', value)}
+            cypressRef="shouldBeInvoicedToggle"
+          />
+        </Element>
+      )}
+
+      {recurringExpense && (
+        <Element leftSide={t('mark_paid')} leftSideHelp={t('mark_paid_help')}>
+          <Toggle
+            checked={isMarkPaid()}
+            onChange={onMarkPaid}
+            cypressRef="markPaidToggle"
+          />
+        </Element>
+      )}
+
+      {recurringExpense && isMarkPaid() && (
+        <Element leftSide={t('payment_type')}>
+          <PaymentTypeSelector
+            value={recurringExpense.payment_type_id}
+            onChange={(id) => handleChange('payment_type_id', id)}
+            errorMessage={errors?.errors.payment_type_id}
+          />
+        </Element>
+      )}
+
+      {recurringExpense && isMarkPaid() && (
+        <Element leftSide={t('date')}>
+          <InputField
+            type="date"
+            value={recurringExpense.payment_date}
+            onValueChange={(date) => handleChange('payment_date', date)}
+            errorMessage={errors?.errors.payment_date}
+          />
+        </Element>
+      )}
+
+      {recurringExpense && isMarkPaid() && (
+        <Element leftSide={t('transaction_reference')}>
+          <InputField
+            value={recurringExpense.transaction_reference}
+            onValueChange={(date) =>
+              handleChange('transaction_reference', date)
+            }
+            errorMessage={errors?.errors.transaction_reference}
+          />
+        </Element>
+      )}
+
+      {recurringExpense && (
+        <Element
+          leftSide={t('convert_currency')}
+          leftSideHelp={t('convert_currency_help')}
+        >
+          <Toggle
+            checked={convertCurrency || false}
+            onChange={onConvertCurrency}
+            cypressRef="convertCurrencyToggle"
+          />
+        </Element>
+      )}
+
+      {recurringExpense && convertCurrency && (
+        <>
+          <Element leftSide={t('currency')}>
+            <CurrencySelector
+              value={recurringExpense.invoice_currency_id}
+              onChange={(id) => handleChange('invoice_currency_id', id)}
+              errorMessage={errors?.errors.invoice_currency_id}
+            />
+          </Element>
+
+          <Element leftSide={t('exchange_rate')}>
+            <InputField
+              value={recurringExpense.exchange_rate}
+              onValueChange={onExchangeRateChange}
+              errorMessage={errors?.errors.exchange_rate}
+            />
+          </Element>
+
+          <Element leftSide={t('converted_amount')}>
+            <InputField
+              value={recurringExpense.foreign_amount}
+              onValueChange={onConvertedAmountChange}
+              errorMessage={errors?.errors.foreign_amount}
+            />
+          </Element>
+        </>
+      )}
+
+      {recurringExpense && (
+        <Element
+          leftSide={t('add_documents_to_invoice')}
+          leftSideHelp={t('add_documents_to_invoice_help')}
+        >
+          <Toggle
+            checked={recurringExpense.invoice_documents}
+            onChange={(value) => handleChange('invoice_documents', value)}
+            cypressRef="addDocumentsToInvoiceToggle"
+          />
+        </Element>
+      )}
+    </Card>
+  );
+}
